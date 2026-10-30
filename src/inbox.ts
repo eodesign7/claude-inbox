@@ -1,6 +1,6 @@
 import type { Db } from "./db.js";
 import { getSection, readCard } from "./cards.js";
-import { agentOverview } from "./core.js";
+import { HELD_SQL, agentOverview, listPending, type PendingItem } from "./core.js";
 import { activeSessions, endSession, startSession, touchSession } from "./sessions.js";
 
 const C = {
@@ -19,6 +19,8 @@ export interface StatusModel {
   segments: Seg[];
   /** rovnaký riadok bez farieb */
   plain: string;
+  /** tasks waiting for the user's approval (all projects) */
+  pending: PendingItem[];
 }
 
 /** Zloží časti riadku oddelené " · ". */
@@ -33,11 +35,18 @@ function line(parts: Seg[]): Seg[] {
 
 /** Riadok status line ako segmenty so štýlom (spoločný základ pre ANSI aj pre mod). */
 export function statusModel(db: Db | null, agent: string | null): StatusModel {
+  let pending: PendingItem[] = [];
+  try {
+    if (db) pending = listPending(db);
+  } catch {
+    /* stará DB bez stĺpca approval */
+  }
   const make = (kind: StatusModel["kind"], segments: Seg[]): StatusModel => ({
     kind,
     agent,
     segments,
     plain: segments.map((x) => x.t).join(""),
+    pending: pending.slice(0, 5),
   });
   if (agent === null) return make("noidentity", [{ t: "📬 bez identity" }]);
   if (!db) return make("offline", [{ t: "📬 pošta offline" }]);
@@ -60,6 +69,7 @@ export function statusModel(db: Db | null, agent: string | null): StatusModel {
   if (o.caka) parts.push({ t: `${o.caka} čaká`, s: "dim" });
   if (!hasMail) parts.push({ t: "čisto" });
   if (sessions) parts.push({ t: `${sessions} ${sessions === 1 ? "session" : "sessions"}` });
+  if (pending.length) parts.push({ t: `${pending.length} na schválenie`, s: "hi" });
   if (hasMail && o.latestSubject) parts.push({ t: `„${cut(o.latestSubject, 40)}“`, s: "dim" });
   return make("ok", line(parts));
 }
@@ -101,21 +111,27 @@ export function cardBlock(agent: string): string | null {
 function unseenMail(db: Db, agent: string, session: string): string | null {
   const rows = db
     .prepare(
-      `SELECT m.id, m.thread_id, m.from_agent AS "from", t.subject
+      `SELECT m.id, m.thread_id, m.from_agent AS "from", m.kind, m.body, t.subject
        FROM messages m JOIN threads t ON t.id = m.thread_id
-       WHERE m.to_agent = ? AND m.read_at IS NULL
+       WHERE m.to_agent = ? AND m.read_at IS NULL AND ${HELD_SQL}
          AND NOT EXISTS (SELECT 1 FROM session_seen s WHERE s.session_id = ? AND s.message_id = m.id)
        ORDER BY m.id ASC`,
     )
-    .all(agent, session) as { id: number; thread_id: number; from: string; subject: string }[];
+    .all(agent, session) as { id: number; thread_id: number; from: string; kind: string; body: string; subject: string }[];
   if (!rows.length) return null;
   const now = new Date().toISOString();
   const ins = db.prepare("INSERT OR IGNORE INTO session_seen (session_id, message_id, seen_at) VALUES (?,?,?)");
   for (const r of rows) ins.run(session, r.id, now);
   db.prepare("DELETE FROM session_seen WHERE seen_at < ?").run(new Date(Date.now() - 30 * 86400_000).toISOString());
-  const byThread = new Map<number, { from: string; subject: string }>();
-  for (const r of rows) byThread.set(r.thread_id, { from: r.from, subject: r.subject });
-  const list = [...byThread].map(([id, v]) => `- #${id} od ${v.from}: ${v.subject}`).join("\n");
+  const byThread = new Map<number, { from: string; subject: string; approved: boolean }>();
+  for (const r of rows) {
+    const approved = r.kind === "reply" && /^Approved\b/.test(r.body);
+    const prev = byThread.get(r.thread_id);
+    byThread.set(r.thread_id, { from: r.from, subject: r.subject, approved: approved || !!prev?.approved });
+  }
+  const list = [...byThread]
+    .map(([id, v]) => (v.approved ? `- #${id} SCHVÁLENÉ používateľom, začni: ${v.subject}` : `- #${id} od ${v.from}: ${v.subject}`))
+    .join("\n");
   return `Pošta pre ${agent}:\n${list}\nMáš novú poštu, pri vhodnej chvíli zavolaj read_thread.`;
 }
 

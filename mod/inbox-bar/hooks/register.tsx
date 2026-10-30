@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Seg, Status } from '../types'
+import type { Pending, Seg, Status } from '../types'
 
 const status = atom({ plugin: 'inbox-bar', key: 'status' } as const, null)
 
@@ -9,6 +9,7 @@ const REFRESH_MS = 15_000
 const OFFLINE: Status = {
   segments: [{ t: '📬 pošta offline' }],
   plain: '📬 pošta offline',
+  pending: [],
 }
 
 // Stav modulu; po reloade začína odznova.
@@ -60,19 +61,32 @@ async function refresh($: EngineInterface) {
       stdin: JSON.stringify({ workspace: { current_dir: run.cwd } }),
       timeoutMs: 5000,
     })
-    const model = JSON.parse(result.stdout) as { segments?: Seg[]; plain?: string }
+    const model = JSON.parse(result.stdout) as { segments?: Seg[]; plain?: string; pending?: Pending[] }
 
     if (result.exitCode !== 0 || !model.segments || !model.plain) {
       throw new Error('claude-inbox answered without a status')
     }
 
-    const next: Status = { segments: model.segments, plain: model.plain }
+    const next: Status = { segments: model.segments, plain: model.plain, pending: model.pending ?? [] }
 
     await update($, status, () => next)
   } catch {
     run.command = undefined // príkaz sa mohol presunúť: nabudúce znova z nastavení
     await update($, status, () => OFFLINE)
   }
+}
+
+/** Approves or declines a task with the same command the CLI uses, then redraws. */
+async function decide($: EngineInterface, verb: 'approve' | 'decline', id: number) {
+  try {
+    run.command ??= fromSettings(await $.settings.read()) ?? ['claude-inbox']
+    await $.process.run([...run.command, verb, String(id)], { cwd: run.cwd || undefined, timeoutMs: 10_000 })
+    $.ui.toast(verb === 'approve' ? `Task #${id} approved` : `Task #${id} declined`)
+  } catch {
+    $.ui.toast(`Could not ${verb} task #${id}`)
+  }
+
+  await refresh($)
 }
 
 export const register: Register = on => {
@@ -100,9 +114,9 @@ export const register: Register = on => {
 
     if (current === null) return next(e)
 
-    const { Button, Text } = $.ui.resolve(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
 
-    return (
+    const line = (
       <Button
         key="mail"
         label={current.plain}
@@ -122,6 +136,36 @@ export const register: Register = on => {
           ),
         )}
       </Button>
+    )
+
+    if (current.pending.length === 0) return line
+
+    return (
+      <Box flexDirection="column">
+        {line}
+        {current.pending.slice(0, 3).map(p => (
+          <Box key={`pending-${p.id}`}>
+            <Text>
+              {'📥 '}#{p.id} {p.from} → {p.to}: „{p.subject}“{'  '}
+            </Text>
+            <Button
+              key={`approve-${p.id}`}
+              label="Approve"
+              onPress={() => {
+                void decide($, 'approve', p.id)
+              }}
+            />
+            <Text> </Text>
+            <Button
+              key={`decline-${p.id}`}
+              label="Decline"
+              onPress={() => {
+                void decide($, 'decline', p.id)
+              }}
+            />
+          </Box>
+        ))}
+      </Box>
     )
   })
 }

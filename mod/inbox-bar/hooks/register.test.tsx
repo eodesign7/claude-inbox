@@ -15,6 +15,7 @@ const BAND = {
 
 const MODEL = {
   kind: 'ok',
+  pending: [],
   agent: 'api',
   plain: '📬 api · 1 nové · 2 na tebe · 2 sessions · „Test pošty“',
   segments: [
@@ -136,4 +137,36 @@ test('the status is read again every 15 seconds and after a turn', async ($, on)
 
   await clock.advance(30_000)
   expect(reads).toBe(4)
+})
+
+test('tasks waiting for approval show Approve and Decline, which run the CLI', async ($, on) => {
+  const clock = mock.clock(on)
+  const calls: string[][] = []
+  const withPending = {
+    ...MODEL,
+    pending: [{ id: 7, subject: 'Auth podľa plánu', from: 'chat', to: 'api' }],
+  }
+
+  on('settings.read', () => ({ value: {} }))
+  on('process.run', (_, e) => {
+    calls.push([...e.argv])
+
+    return { value: { ...OK, stdout: JSON.stringify(withPending) } }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/work', surface: 'desktop', isInteractive: true })
+  await clock.settle()
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+
+    expect((await ui.find({ type: 'Text', text: /#7 chat → api/ }))?.text).toContain('Auth podľa plánu')
+    await ui.press({ key: 'approve-7' })
+    await ui.press({ key: 'decline-7' })
+    await ui.unmount()
+  }
+
+  expect(calls.filter(c => c.includes('approve'))).toEqual([['claude-inbox', 'approve', '7'], ['claude-inbox', 'approve', '7']])
+  expect(calls.filter(c => c.includes('decline')).length).toBe(2)
 })

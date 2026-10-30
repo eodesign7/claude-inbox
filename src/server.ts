@@ -51,17 +51,12 @@ const kind = z.enum(KINDS);
 
 server.registerTool(
   "map",
-  { description: "Overview of all projects: focus, open threads, active sessions, last summary.", inputSchema: {} },
-  wrap(() => json(mapOverview(db))),
-);
-
-server.registerTool(
-  "project_get",
   {
-    description: "Full project card, notes, open threads, active sessions, last 3 summaries.",
-    inputSchema: { agent: z.string() },
+    description:
+      "Overview of all projects (focus, open threads, sessions, pending approvals, last summary). With `agent`: that project in full (card, notes, threads, sessions, summaries).",
+    inputSchema: { agent: z.string().optional() },
   },
-  wrap((a) => json(projectGet(db, a.agent))),
+  wrap((a) => json(a.agent ? projectGet(db, a.agent) : mapOverview(db))),
 );
 
 server.registerTool(
@@ -138,6 +133,20 @@ server.registerTool(
     },
   },
   wrap((a) => json(mailbox.closeThread(a.thread_id, a.summary, a.focus, a.next))),
+);
+
+server.registerTool(
+  "approve",
+  {
+    description:
+      "Approve or decline a task waiting for the user's approval. Only when the user asks you to; a project never approves tasks addressed to itself.",
+    inputSchema: {
+      thread_id: threadId,
+      decision: z.enum(["approve", "decline"]).default("approve"),
+      note: z.string().optional(),
+    },
+  },
+  wrap((a) => json(mailbox.approve(a.thread_id, a.decision, a.note))),
 );
 
 server.registerTool(

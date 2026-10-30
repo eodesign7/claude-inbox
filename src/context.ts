@@ -17,7 +17,7 @@ import {
 } from "./cards.js";
 import type { Db } from "./db.js";
 import { recentEntries } from "./log.js";
-import { Inbox, listAllThreads } from "./core.js";
+import { Inbox, listAllThreads, listPending } from "./core.js";
 import { activeSessions } from "./sessions.js";
 
 const oneLine = (s: string, n = 160) => {
@@ -32,6 +32,7 @@ function entrySummary(e: ReturnType<typeof recentEntries>[number]) {
 export function mapOverview(db: Db) {
   const agents = new Set<string>(listCards());
   const open = listAllThreads(db, "open");
+  const pending = listPending(db);
   for (const t of open) for (const p of t.participants) agents.add(p);
   for (const s of activeSessions(db)) agents.add(s.agent);
   return [...agents].sort().map((agent) => {
@@ -42,6 +43,8 @@ export function mapOverview(db: Db) {
       focus: card ? oneLine(getSection(card.body, "Aktuálny fokus")) || null : null,
       open_threads: open.filter((t) => t.participants.includes(agent) || t.created_by === agent).length,
       active_sessions: activeSessions(db, agent).length,
+      wake: card?.meta.wake ?? "off",
+      pending_approvals: pending.filter((p) => p.to === agent).map((p) => ({ id: p.id, subject: p.subject, from: p.from })),
       last_summary: last ? entrySummary(last) : null,
     };
   });
@@ -61,11 +64,13 @@ export function projectGet(db: Db, agent: string) {
   return {
     agent: a,
     card: card?.raw ?? null,
+    wake: card?.meta.wake ?? "off",
     notes: listNotes(a),
     open_threads: new Inbox(db, a).threads("open").map((t) => ({
       id: t.id,
       subject: t.subject,
       ticket: t.ticket,
+      approval: t.approval,
       state: t.state,
       participants: t.participants,
     })),

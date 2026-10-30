@@ -205,7 +205,7 @@ describe("MCP server cez stdio", () => {
     try {
       const names = (await a.listTools()).tools.map((t) => t.name).sort();
       expect(names).toEqual([
-        "close_thread", "context_write", "inbox", "map", "project_get", "read_thread", "reply", "repo_read", "send", "threads",
+        "approve", "close_thread", "context_write", "inbox", "map", "read_thread", "reply", "repo_read", "send", "threads",
       ]);
 
       const sent = JSON.parse(textOf(await a.callTool({ name: "send", arguments: { to: "api", subject: "Úloha", body: "Urob X" } })));

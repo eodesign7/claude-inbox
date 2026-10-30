@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS threads (
   subject     TEXT NOT NULL,
   created_by  TEXT NOT NULL,
   ticket      TEXT,
+  approval    TEXT NOT NULL DEFAULT 'none',
+  approval_at TEXT,
   status      TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done','cancelled')),
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL
@@ -40,6 +42,17 @@ CREATE TABLE IF NOT EXISTS sessions (
   ended_at      TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent);
+CREATE TABLE IF NOT EXISTS runs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id   INTEGER NOT NULL,
+  agent       TEXT NOT NULL,
+  cwd         TEXT NOT NULL,
+  log_path    TEXT NOT NULL,
+  started_at  TEXT NOT NULL,
+  ended_at    TEXT,
+  exit_code   INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_runs_thread ON runs(thread_id);
 CREATE TABLE IF NOT EXISTS session_seen (
   session_id  TEXT NOT NULL,
   message_id  INTEGER NOT NULL,
@@ -55,13 +68,17 @@ function isBusy(e: unknown) {
 /** Doplní stĺpce pridané po v1. */
 function migrate(db: Db) {
   const cols = (db.prepare("PRAGMA table_info(threads)").all() as { name: string }[]).map((c) => c.name);
-  if (!cols.includes("ticket")) {
+  const add = (name: string, ddl: string) => {
+    if (cols.includes(name)) return;
     try {
-      db.exec("ALTER TABLE threads ADD COLUMN ticket TEXT");
+      db.exec(`ALTER TABLE threads ADD COLUMN ${ddl}`);
     } catch (e) {
       if (!/duplicate column/i.test(String(e))) throw e;
     }
-  }
+  };
+  add("ticket", "ticket TEXT");
+  add("approval", "approval TEXT NOT NULL DEFAULT 'none'");
+  add("approval_at", "approval_at TEXT");
 }
 
 export function openDb(path = defaultDbPath()): Db {

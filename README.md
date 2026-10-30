@@ -10,6 +10,8 @@ tickets and project context. One person, one machine, no network.
 - **Project map.** Every project has a markdown *card* (what it is, current focus, decisions, next step) that you can edit
   in any editor. Chat and Code read it before they work.
 - **Sessions.** See which Claude Code sessions are active in which project and branch.
+- **You approve, nothing starts by itself.** A task for a project that opted in waits for your approval, in any Code
+  session (the band above the prompt) or in chat. See [Approvals](#approvals-and-waking-up-a-project).
 - **Status line + band.** Every Code session shows `📬 api · 1 new · 2 on you · 1 waiting · 2 sessions` for its own project.
 
 ## Install
@@ -62,8 +64,7 @@ An MCP server shared by chat and Code must know *who is talking*:
 
 | tool | what it does |
 |---|---|
-| `map()` | all projects: focus, open threads, active sessions, last summary |
-| `project_get(agent)` | card, notes, open threads, active sessions, last 3 summaries |
+| `map(agent?)` | all projects: focus, open threads, active sessions, pending approvals, last summary; with `agent` the whole project: card, notes, threads, sessions, last 3 summaries |
 | `context_write(agent, file, text, section?)` | write the card (`"card"`) or a note; with `section` only that section; frontmatter is never changed |
 | `repo_read(agent, path)` | read-only access to `.md` files inside the project's `paths` |
 | `send(to, subject, body, kind?, ticket?)` | new thread |
@@ -71,7 +72,31 @@ An MCP server shared by chat and Code must know *who is talking*:
 | `inbox(unread_only?)` | my messages |
 | `read_thread(thread_id)` | whole thread, marks it read |
 | `close_thread(thread_id, summary, focus?, next?)` | closes, sends the summary, appends the daily log, rewrites card sections |
+| `approve(thread_id, decision?, note?)` | approve or decline a task that waits for the user; a project can never approve tasks addressed to itself |
 | `threads(status?, agent?)` | threads by status |
+
+## Approvals and waking up a project
+
+By default nothing happens when a task arrives: it sits in the inbox until you open a session and say "mail". A project can
+opt in to approvals with `wake` in the frontmatter of its card (or `claude-inbox wake <agent> armed`):
+
+| `wake` | what happens |
+|---|---|
+| `off` (default) | no approval, nothing starts, tasks are delivered as before |
+| `armed` | a new task is **held** (invisible to the project, unread, unanswerable) until you approve it. After approval the next session in that repo starts with "task #7 is approved, start". Nothing is launched. |
+| `headless` | like `armed`, and on approval claude-inbox starts `claude -p` in the project's repo by itself. Only if you set it. |
+
+Where you approve:
+
+- **Any Claude Code session:** the `inbox-bar` band shows `📥 #7 chat → api: „Auth plan“ [Approve] [Decline]` above the prompt,
+  so you can decide from whichever session you have open.
+- **Chat:** ask the orchestrator to approve (`map()` lists pending tasks, `approve(thread_id)` decides).
+- **Terminal:** `claude-inbox pending`, `claude-inbox approve 7 "go"`, `claude-inbox decline 7 "not now"`.
+
+Declining cancels the thread and tells the sender. Headless runs use `--permission-mode acceptEdits` and may call the
+claude-inbox tools plus whatever you list in the card as `wake_allowed_tools` (for example `Bash(git:*),Bash(npm:*)`);
+set `wake_permission_mode` to change the mode. A headless run cannot ask you anything: when something is unclear it asks
+via `reply` and the thread waits. Logs are in `~/.claude-inbox/runs/`, `claude-inbox runs` lists them.
 
 ## Files
 
@@ -95,6 +120,9 @@ claude-inbox log [YYYY-MM-DD]     # daily log
 claude-inbox link <agent>         # card from template + this repo's path
 claude-inbox whoami               # who am I here and why
 claude-inbox send <to> "text" --as <agent>
+claude-inbox pending | approve <id> [note] | decline <id> [reason]
+claude-inbox wake <agent> [off|armed|headless]
+claude-inbox runs                 # headless runs
 ```
 
 ## Troubleshooting
@@ -146,6 +174,9 @@ claude-inbox link <agent>
   `default`. V chate platí `CLAUDE_INBOX_AGENT`. Zistíš ju cez `claude-inbox whoami`.
 - **Kontext** je v markdowne `~/.claude-inbox/projects/<agent>/card.md` (sekcie *Čo to je, Aktuálny fokus, Rozhodnutia,
   Ďalší krok*), upravíš ho v editore: `claude-inbox card <agent>`.
+- **Schvaľovanie:** úloha pre projekt s `wake: armed` alebo `headless` čaká na tvoje schválenie (pás nad promptom v ktorejkoľvek
+  Code session, chat alebo `claude-inbox approve <id>`). Bez `wake` sa nič nemení a nič sa nespúšťa samo. Podrobnosti sú v
+  anglickej časti *Approvals*.
 - **Nástroje, súbory a CLI** sú rovnaké ako v anglickej časti vyššie. Bloky inštrukcií pre chat a Claude Code sú v
   [INSTRUKCIE.md](INSTRUKCIE.md).
 - **Riešenie problémov:** server v appke chýba → `npm run setup -- --wait` a ukonči appku; `npm run check` overí config.

@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { isCodeSession, linkProject, resolveAgentInfo } from "./agent.js";
 import { agentName } from "./base.js";
-import { cardPath, ensureCard } from "./cards.js";
+import { WAKE_MODES, cardPath, ensureCard, setCardKey, wakeMode } from "./cards.js";
 import { mapOverview } from "./context.js";
 import { openDb } from "./db.js";
 import { localDate, readLogText } from "./log.js";
-import { InboxError, formatThread, getThread, sendMessage } from "./core.js";
+import { InboxError, decideApproval, formatThread, getThread, listPending, sendMessage } from "./core.js";
+import { listRuns } from "./runs.js";
 
 const USAGE = `claude-inbox map
 claude-inbox show <thread_id>
@@ -67,6 +68,46 @@ export function main(argv: string[]) {
       return console.log(
         `${r.agent} (zdroj: ${names[r.source]}, ${r.detail}; ${isCodeSession() ? "Claude Code" : "chat"})`,
       );
+    }
+    case "pending": {
+      const rows = listPending(openDb());
+      if (!rows.length) return console.log("Nothing waits for approval.");
+      for (const p of rows) {
+        console.log(`#${p.id}  ${p.from} → ${p.to}  „${p.subject}“${p.ticket ? `  [${p.ticket}]` : ""}  ${p.created_at}`);
+      }
+      return;
+    }
+    case "approve":
+    case "decline": {
+      const id = Number(rest[0]);
+      if (!Number.isInteger(id)) fail(USAGE);
+      const r = decideApproval(openDb(), id, cmd, "user", rest.slice(1).join(" "));
+      console.log(`#${id} ${cmd === "approve" ? "approved" : "declined"} (${r.to}, wake: ${r.wake})`);
+      if (r.run) console.log(`Headless run #${r.run.run_id} started, log: ${r.run.log}`);
+      if (r.run_error) console.error(`Run not started: ${r.run_error}`);
+      return;
+    }
+    case "wake": {
+      if (!rest[0]) fail(USAGE);
+      const agent = agentName(rest[0]);
+      if (rest[1]) {
+        if (!(WAKE_MODES as readonly string[]).includes(rest[1])) fail(`Mode must be one of: ${WAKE_MODES.join(", ")}`);
+        setCardKey(agent, "wake", rest[1]);
+        if (rest[1] === "headless") {
+          console.log("Headless runs use `claude -p` in the repo with --permission-mode acceptEdits (set wake_permission_mode in the card to change)");
+          console.log("and may use tools of the claude-inbox server plus wake_allowed_tools from the card.");
+        }
+      }
+      return console.log(`${agent}: wake ${wakeMode(agent)}`);
+    }
+    case "runs": {
+      const rows = listRuns(openDb());
+      if (!rows.length) return console.log("No runs yet.");
+      for (const r of rows) {
+        const state = r.ended_at ? `exit ${r.exit_code}` : "running";
+        console.log(`#${r.id}  thread #${r.thread_id}  ${r.agent}  ${state}  ${r.started_at}  ${r.log_path}`);
+      }
+      return;
     }
     case "send": {
       const asIdx = rest.indexOf("--as");

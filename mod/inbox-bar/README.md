@@ -14,6 +14,8 @@ A Claude Code mod (terminal and the Code tab of the desktop app): one line above
 - Refreshes on session start, after every turn and at least every 15 seconds.
 - No identity: `📬 bez identity`; no database or no `claude-inbox` command: `📬 pošta offline`.
 - Clicking the line puts the word `pošta` into the prompt.
+- Tasks waiting for your approval (from any project) show as `📥 #7 chat → api: „subject“ [Approve] [Decline]` rows below the
+  line (the buttons run `claude-inbox approve|decline`), so you decide from whichever session is open.
 
 ## Requirements
 

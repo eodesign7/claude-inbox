@@ -55,6 +55,11 @@ export interface Meta {
   name?: string;
   paths: string[];
   ticket_prefix?: string;
+  /** off (default) | armed | headless */
+  wake?: string;
+  wake_permission_mode?: string;
+  /** comma separated tool patterns allowed in headless runs, e.g. "Bash(git:*),Bash(npm:*)" */
+  wake_allowed_tools?: string;
 }
 
 export function parseFront(front: string | null): Meta {
@@ -85,6 +90,9 @@ export function parseFront(front: string | null): Meta {
     name: s("name"),
     paths: Array.isArray(out.paths) ? (out.paths as string[]) : s("paths") ? [s("paths")!] : [],
     ticket_prefix: s("ticket_prefix"),
+    wake: s("wake"),
+    wake_permission_mode: s("wake_permission_mode"),
+    wake_allowed_tools: s("wake_allowed_tools"),
   };
 }
 
@@ -101,6 +109,19 @@ export function editPaths(front: string, paths: string[]): string {
   while (e < lines.length && /^\s*-\s/.test(lines[e]!)) e++;
   lines.splice(i, e - i, ...block);
   return lines.join("\n");
+}
+
+/** Prepíše (alebo pridá) jeden skalárny kľúč v surovom frontmattere, zvyšok nechá bajt po bajte. */
+export function editKey(front: string, key: string, value: string): string {
+  const lines = front.split("\n");
+  const line = `${key}: ${yq(value)}`;
+  const i = lines.findIndex((l) => l.startsWith(`${key}:`));
+  if (i >= 0) {
+    lines.splice(i, 1, line);
+    return lines.join("\n");
+  }
+  while (lines.length && lines[lines.length - 1]!.trim() === "") lines.pop();
+  return [...lines, line].join("\n");
 }
 
 // ---- karta ----------------------------------------------------------------
@@ -140,6 +161,22 @@ export function listCards(): string[] {
   } catch {
     return [];
   }
+}
+
+export const WAKE_MODES = ["off", "armed", "headless"] as const;
+export type WakeMode = (typeof WAKE_MODES)[number];
+
+/** Ako sa projekt budí po prijatí úlohy. Bez karty alebo bez kľúča `wake`: off (nič sa nedeje). */
+export function wakeMode(agent: string): WakeMode {
+  const w = readCard(agent)?.meta.wake;
+  return (WAKE_MODES as readonly string[]).includes(w ?? "") ? (w as WakeMode) : "off";
+}
+
+/** Nastaví kľúč vo frontmattere karty (len pre CLI; nástroje MCP frontmatter nemenia). */
+export function setCardKey(agent: string, key: string, value: string): void {
+  ensureCard(agent);
+  const c = readCard(agent)!;
+  writeAtomic(cardPath(agent), joinFront(editKey(c.front ?? `name: ${agent}`, key, value), c.body));
 }
 
 /** Založí kartu zo šablóny, ak neexistuje. Vráti true, ak ju vytvoril. */

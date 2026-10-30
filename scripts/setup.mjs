@@ -26,7 +26,7 @@ const { migrateLegacy } = await import(pathToFileURL(dist("cards.js")).href);
 const { desktopRunning, waitForQuit, checkDesktop } = await import(
   pathToFileURL(join(root, "scripts", "check-desktop.mjs")).href
 );
-const { findClaude } = await import(pathToFileURL(join(root, "scripts", "find-claude.mjs")).href);
+const { findClaude } = await import(pathToFileURL(dist("find-claude.js")).href);
 
 // Bežiaca appka drží vlastnú kópiu configu a pri ďalšom uložení prepíše náš zápis.
 if (!process.env.CLAUDE_INBOX_DESKTOP_CONFIG && !has("--force") && desktopRunning()) {

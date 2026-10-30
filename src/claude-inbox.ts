@@ -15,7 +15,7 @@ function stdinJson(): any {
 }
 
 /** Podpríkazy pre človeka (map, show, card, ...) obsluhuje cli.ts; status line a hooky zvyšok. */
-const CLI_COMMANDS = new Set(["map", "show", "card", "log", "link", "whoami", "send", "help", "--help", "-h"]);
+const CLI_COMMANDS = new Set(["map", "show", "card", "log", "link", "whoami", "send", "pending", "approve", "decline", "wake", "runs", "help", "--help", "-h"]);
 
 function statusOrHook() {
   const input = stdinJson();
