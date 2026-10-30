@@ -1,0 +1,10 @@
+{
+  "name": "inbox-bar",
+  "version": "0.1.0",
+  "description": "A band above the prompt showing the claude-inbox mail status of the project the session runs in.",
+  "license": "MIT",
+  "author": {
+    "name": "claude-inbox contributors"
+  },
+  "types": "./types/index.d.ts"
+}

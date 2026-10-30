@@ -1,0 +1,57 @@
+{
+  "name": "claude-inbox",
+  "version": "0.2.0",
+  "description": "A local inbox that lets Claude chat and Claude Code sessions exchange tasks, tickets and project context (MCP server + status line + hooks).",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "claude-inbox": "dist/claude-inbox.js",
+    "claude-inbox-mcp": "dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "setup": "node scripts/setup.mjs",
+    "check": "node scripts/check-desktop.mjs",
+    "test:mod": "claude plugin test mod/inbox-bar"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "better-sqlite3": "^13.0.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "mcp",
+    "inbox",
+    "multi-agent"
+  ],
+  "files": [
+    "dist",
+    "scripts",
+    "mod",
+    ".claude-plugin",
+    "README.md",
+    "INSTRUCTIONS.md",
+    "INSTRUKCIE.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eodesign7/claude-inbox.git"
+  },
+  "homepage": "https://github.com/eodesign7/claude-inbox#readme",
+  "bugs": {
+    "url": "https://github.com/eodesign7/claude-inbox/issues"
+  }
+}

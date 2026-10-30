@@ -1,0 +1,14 @@
+{
+  "name": "claude-inbox",
+  "owner": {
+    "name": "claude-inbox contributors"
+  },
+  "plugins": [
+    {
+      "name": "inbox-bar",
+      "source": "./mod/inbox-bar",
+      "description": "A band above the prompt showing the claude-inbox mail status of the project the session runs in."
+    }
+  ],
+  "description": "claude-inbox: a local inbox for tasks, tickets and project context between Claude chat and Claude Code."
+}
