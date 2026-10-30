@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // npm run setup [-- --chat-agent=<name> --wait --force --no-build --no-link --no-claude-mcp]
 import { execFileSync, execSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, unlinkSync, writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -155,6 +157,34 @@ console.log("  statusLine + SessionStart, UserPromptSubmit, SessionEnd hooks set
 // 6. príkaz claude-inbox globálne
 if (!has("--no-link")) {
   console.log("\n→ npm link (command claude-inbox)");
+  // the 0.1 package (aico-posta) left a global link owning the same command name
+  try {
+    execSync("npm unlink -g aico-posta", { cwd: root, stdio: "ignore" });
+  } catch {
+    /* not linked */
+  }
+  // the 0.1 package (aico-posta) left a global link owning the same command name
+  try {
+    execSync("npm unlink -g aico-posta", { cwd: root, stdio: "ignore" });
+  } catch {
+    /* not linked */
+  }
+  try {
+    const bin = join(execSync("npm prefix -g", { cwd: root, encoding: "utf8" }).trim(), "bin");
+    for (const name of ["claude-inbox", "posta", "aico-posta"]) {
+      const link = join(bin, name);
+      // only dangling symlinks that point into the old package are removed
+      if (
+        lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink() &&
+        !existsSync(link) &&
+        readlinkSync(link).includes("node_modules/aico-posta/")
+      ) {
+        unlinkSync(link);
+      }
+    }
+  } catch {
+    /* best effort */
+  }
   try {
     run("npm link");
   } catch {
