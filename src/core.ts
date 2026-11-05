@@ -287,18 +287,32 @@ export class Inbox {
     return rows.map((r) => ({ ...r, unread: !!r.unread }));
   }
 
-  readThread(threadId: number) {
+  /**
+   * The whole thread for the caller. Unless `full`, messages in the middle that the caller already read
+   * (or wrote) are listed in `collapse` and shown as one line each; the first message (the brief), the last one
+   * and everything unread always stay whole.
+   */
+  readThread(threadId: number, full = false) {
     return this.db
       .transaction(() => {
         const t = loadThread(this.db, threadId);
         assertParticipant(this.db, t, this.agent);
+        const held = isHeld(this.db, t, this.agent);
+        const before = getThread(this.db, threadId);
+        const unread = new Set(
+          before.messages.filter((m) => m.to_agent === this.agent && m.read_at === null).map((m) => m.id),
+        );
         // a task that is not approved is shown to its recipient but not consumed
-        if (!isHeld(this.db, t, this.agent)) {
+        if (!held) {
           this.db
             .prepare("UPDATE messages SET read_at = ? WHERE thread_id = ? AND to_agent = ? AND read_at IS NULL")
             .run(now(), threadId, this.agent);
         }
-        return getThread(this.db, threadId);
+        const msgs = getThread(this.db, threadId).messages;
+        const collapse = full
+          ? []
+          : msgs.filter((m, i) => i > 0 && i < msgs.length - 1 && !unread.has(m.id) && !(held && m.to_agent === this.agent)).map((m) => m.id);
+        return { thread: before.thread, messages: msgs, collapse };
       })
       .immediate();
   }
@@ -410,15 +424,24 @@ export function agentOverview(db: Db, agent: string): Overview {
   return { nove, naTebe, caka: last.length - naTebe, latestSubject: latest?.s ?? null };
 }
 
-export function formatThread({ thread, messages }: ReturnType<typeof getThread>): string {
+export function formatThread(
+  { thread, messages }: ReturnType<typeof getThread>,
+  collapse: readonly number[] = [],
+): string {
   const approval = thread.approval !== "none" ? ` · approval: ${thread.approval}` : "";
   const head = `# #${thread.id} ${thread.subject} [${thread.status}${approval}]${thread.ticket ? ` · ${thread.ticket}` : ""}`;
   const banner =
     thread.approval === "pending" || thread.approval === "declined"
       ? `⚠ NOT APPROVED (${thread.approval}). Do not start this task.\n\n`
       : "";
+  const hidden = new Set(collapse);
+  const oneLine = (m: (typeof messages)[number]) => {
+    const first = m.body.replace(/\s+/g, " ").trim();
+    return `· ${m.from_agent} → ${m.to_agent} · ${m.kind} · ${m.created_at.slice(0, 16)}: ${first.length > 90 ? first.slice(0, 89) + "…" : first}`;
+  };
   const body = messages
-    .map((m) => `## ${m.from_agent} → ${m.to_agent} · ${m.kind} · ${m.created_at}\n${m.body}`)
+    .map((m) => (hidden.has(m.id) ? oneLine(m) : `## ${m.from_agent} → ${m.to_agent} · ${m.kind} · ${m.created_at}\n${m.body}`))
     .join("\n\n");
-  return `${head}\n\n${banner}${body}`;
+  const note = hidden.size ? `\n\n(${hidden.size} already read messages are shortened; read_thread(${thread.id}, full=true) shows everything.)` : "";
+  return `${head}\n\n${banner}${body}${note}`;
 }

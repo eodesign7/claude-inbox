@@ -117,8 +117,15 @@ server.registerTool(
 
 server.registerTool(
   "read_thread",
-  { description: "Whole thread in order; marks my messages read.", inputSchema: { thread_id: threadId } },
-  wrap((a) => text(formatThread(mailbox.readThread(a.thread_id)))),
+  {
+    description:
+      "Whole thread in order; marks my messages read. Already-read middle messages are shortened to one line; full=true shows everything.",
+    inputSchema: { thread_id: threadId, full: z.boolean().default(false) },
+  },
+  wrap((a) => {
+    const r = mailbox.readThread(a.thread_id, a.full);
+    return text(formatThread(r, r.collapse));
+  }),
 );
 
 server.registerTool(

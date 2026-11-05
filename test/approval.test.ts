@@ -222,3 +222,55 @@ describe("CLI", () => {
     expect(cli("runs")).toContain("No runs yet.");
   });
 });
+
+describe("read_thread: úsporné čítanie dlhých vlákien", () => {
+  const long = "x".repeat(600);
+
+  it("stredné už prečítané správy sa skrátia; prvá, posledná a neprečítané ostanú celé", () => {
+    const t = chat.send("worker", "Dlhé vlákno", "ZADANIE " + long).thread_id;
+    worker.readThread(t); // worker prečíta zadanie
+    worker.reply(t, "OTAZKA1 " + long, "question");
+    chat.readThread(t);
+    chat.reply(t, "ODPOVED1 " + long);
+    worker.readThread(t);
+    worker.reply(t, "OTAZKA2 " + long, "question");
+    chat.readThread(t);
+    chat.reply(t, "ODPOVED2 " + long); // chat píše ako posledný
+    chat.reply(t, "NOVE-PRE-WORKERA " + long);
+
+    const r = worker.readThread(t);
+    const out = formatThread(r, r.collapse);
+    expect(out).toContain("ZADANIE");
+    expect(out).toContain("NOVE-PRE-WORKERA");
+    expect(out).toContain("ODPOVED2 " + long); // neprečítaná pre workera
+    expect(out).not.toContain("OTAZKA1 " + long); // už prečítaná alebo vlastná, skrátená
+    expect(out).toContain("· worker → chat · question");
+    expect(out).toMatch(/already read messages are shortened; read_thread\(\d+, full=true\)/);
+    expect(out.length).toBeLessThan(formatThread(getThread(db, t)).length * 0.7);
+  });
+  it("full=true vráti všetko a prvé čítanie nového vlákna je vždy celé", () => {
+    const t = chat.send("worker", "Krátke", "ZADANIE").thread_id;
+    const first = worker.readThread(t);
+    expect(first.collapse).toEqual([]);
+    chat.reply(t, "dodatok");
+    worker.reply(t, "otázka", "question");
+    chat.reply(t, "odpoveď");
+    chat.reply(t, "ešte jedna");
+    const again = chat.readThread(t);
+    expect(again.collapse.length).toBeGreaterThan(0);
+    const all = chat.readThread(t, true);
+    expect(all.collapse).toEqual([]);
+    expect(formatThread(all, all.collapse)).not.toMatch(/shortened/);
+  });
+  it("označí prečítané aj pri skrátenom výpise a nezlomí zadržané úlohy", () => {
+    const t = chat.send("worker", "A", "x").thread_id;
+    worker.readThread(t);
+    expect(worker.inbox()).toEqual([]);
+    linkProject(repo("w"), "worker");
+    setCardKey("worker", "wake", "armed");
+    const held = chat.send("worker", "Zadržané", "x").thread_id;
+    const r = worker.readThread(held);
+    expect(r.collapse).toEqual([]);
+    expect(getThread(db, held).messages[0]!.read_at).toBeNull();
+  });
+});

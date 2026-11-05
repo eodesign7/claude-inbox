@@ -70,7 +70,7 @@ An MCP server shared by chat and Code must know *who is talking*:
 | `send(to, subject, body, kind?, ticket?)` | new thread |
 | `reply(thread_id, body, kind?, to?)` | reply in a thread |
 | `inbox(unread_only?)` | my messages |
-| `read_thread(thread_id)` | whole thread, marks it read |
+| `read_thread(thread_id, full?)` | the thread in order, marks it read; already-read middle messages are shortened to one line (the brief, the last and unread messages stay whole), `full=true` shows everything |
 | `close_thread(thread_id, summary, focus?, next?)` | closes, sends the summary, appends the daily log, rewrites card sections |
 | `approve(thread_id, decision?, note?)` | approve or decline a task that waits for the user; a project can never approve tasks addressed to itself |
 | `threads(status?, agent?)` | threads by status |
