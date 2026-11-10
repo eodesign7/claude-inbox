@@ -6,7 +6,7 @@ Slovak version: [INSTRUKCIE.md](INSTRUKCIE.md).
 ## Chat (orchestrator)
 
 ```
-claude-inbox is the bridge between this chat and my Claude Code projects.
+claude-inbox (this chat's server is called claude-inbox-chat) is the bridge between this chat and my Claude Code projects.
 - Before sending a task call `map(agent)`: card, notes, open threads and active sessions.
   Do not assign work that overlaps an open thread.
 - Send a task with `send(to, subject, body, ticket?)`. Write it self-contained (goal, files,

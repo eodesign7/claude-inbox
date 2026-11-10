@@ -105,11 +105,11 @@ export async function checkDesktop({ persistMs = 0 } = {}) {
   if (!existsSync(path)) return fail(`config does not exist: ${path}`);
   let entry;
   try {
-    entry = read().mcpServers?.["claude-inbox"];
+    entry = read().mcpServers?.["claude-inbox-chat"];
   } catch (e) {
     return fail(`config is not valid JSON: ${e.message}`);
   }
-  if (!entry) return fail(`"claude-inbox" is missing from mcpServers (${path})`);
+  if (!entry) return fail(`"claude-inbox-chat" is missing from mcpServers (${path})`);
   if (!entry.command || !(isAbsolute(entry.command) || win32.isAbsolute(entry.command))) {
     return fail(`command is not an absolute path: ${entry.command}`);
   }
@@ -136,7 +136,7 @@ export async function checkDesktop({ persistMs = 0 } = {}) {
   if (persistMs > 0) {
     await new Promise((r) => setTimeout(r, persistMs));
     try {
-      if (!read().mcpServers?.["claude-inbox"]) return fail("the entry vanished from the config (did the app overwrite it?). Quit Claude and run setup again.");
+      if (!read().mcpServers?.["claude-inbox-chat"]) return fail("the entry vanished from the config (did the app overwrite it?). Quit Claude and run setup again.");
     } catch (e) {
       return fail(`the config got corrupted: ${e.message}`);
     }

@@ -89,6 +89,11 @@ export function isCodeSession(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.CLAUDECODE === "1" || !!env.CLAUDE_CODE_ENTRYPOINT || !!env.CLAUDE_CODE_SESSION_ID;
 }
 
+/** MCP client names that stand for Claude Code (the desktop app's local sessions, the CLI, the SDK). */
+export function isCodeClient(name: string | undefined): boolean {
+  return /^(local-agent-mode|claude-code|claude-cli|claude-agent)/i.test(name ?? "");
+}
+
 export interface ResolveOptions {
   env?: NodeJS.ProcessEnv;
   /** Povoliť poslednú možnosť: názov priečinka, potom "default". Status line a hooky ju vypínajú. */

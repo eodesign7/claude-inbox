@@ -87,21 +87,23 @@ if (migrated) console.log(`→ projects migrated from projects.json: ${migrated}
 const desktopPath = desktopConfigPath();
 const desktop = loadWithBackup(desktopPath);
 desktop.mcpServers ??= {};
-const old = desktop.mcpServers["aico-posta"]; // legacy name from 0.1
+// The desktop app hands its own MCP servers to Code sessions too, so the chat entry must not share the
+// name "claude-inbox" with the server Claude Code runs for itself (that one takes its identity from the repo).
+const prevEntries = ["claude-inbox-chat", "claude-inbox", "aico-posta"].map((n) => desktop.mcpServers[n]);
 const chatFlag = flags.find((f) => f.startsWith("--chat-agent="))?.split("=")[1];
 const chatAgent =
   chatFlag ||
-  desktop.mcpServers["claude-inbox"]?.env?.CLAUDE_INBOX_AGENT ||
-  old?.env?.AICO_AGENT ||
+  prevEntries.map((e) => e?.env?.CLAUDE_INBOX_AGENT ?? e?.env?.AICO_AGENT).find(Boolean) ||
   "chat";
+delete desktop.mcpServers["claude-inbox"]; // names from earlier versions
 delete desktop.mcpServers["aico-posta"];
-desktop.mcpServers["claude-inbox"] = {
+desktop.mcpServers["claude-inbox-chat"] = {
   command: process.execPath,
   args: [dist("server.js")],
   env: { CLAUDE_INBOX_AGENT: chatAgent },
 };
 save(desktopPath, desktop);
-console.log(`  server claude-inbox added (CLAUDE_INBOX_AGENT=${chatAgent}). Restart Claude desktop.`);
+console.log(`  server claude-inbox-chat added (CLAUDE_INBOX_AGENT=${chatAgent}). Restart Claude desktop.`);
 
 // 4. Claude Code: MCP server (scope user, bez identity), plugin s pásom
 console.log("\n→ Claude Code");

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, type RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { isCodeSession, resolveAgentOrFallback } from "./agent.js";
+import { isCodeClient, isCodeSession, resolveAgentOrFallback } from "./agent.js";
 import { contextWrite, mapOverview, projectGet, repoRead } from "./context.js";
 import { openDb } from "./db.js";
 import { KINDS, Inbox, InboxError, STATUSES, formatThread } from "./core.js";
@@ -41,15 +41,31 @@ const server = new McpServer(
       }
     : undefined,
 );
+const tools: Record<string, RegisteredTool> = {};
+
+/**
+ * The desktop app also hands its own MCP servers to Code sessions, through a client called
+ * "local-agent-mode-<server>" (chat uses "claude-ai"). An instance whose identity comes from
+ * CLAUDE_INBOX_AGENT (chat) has no idea which repo such a session works in, so for Code clients it
+ * keeps only the tools that take an explicit agent; the identity-bound ones are switched off and
+ * the model uses the claude-inbox server that Claude Code runs itself.
+ */
+export const IDENTITY_TOOLS = ["send", "reply", "inbox", "read_thread", "close_thread", "approve", "threads"] as const;
+
 server.server.oninitialized = () => {
   const c = server.server.getClientVersion();
-  console.error(`claude-inbox: klient=${c?.name ?? "?"}/${c?.version ?? "?"}`);
+  const name = c?.name ?? "?";
+  console.error(`claude-inbox: klient=${name}/${c?.version ?? "?"}`);
+  if (resolved.source === "env" && isCodeClient(name)) {
+    for (const t of IDENTITY_TOOLS) tools[t]?.disable();
+    console.error(`claude-inbox: klient ${name} je Claude Code, identitné nástroje vypnuté (identita ${agent} je pre chat)`);
+  }
 };
 
 const threadId = z.number().int().positive();
 const kind = z.enum(KINDS);
 
-server.registerTool(
+tools.map = server.registerTool(
   "map",
   {
     description:
@@ -59,7 +75,7 @@ server.registerTool(
   wrap((a) => json(a.agent ? projectGet(db, a.agent) : mapOverview(db))),
 );
 
-server.registerTool(
+tools.context_write = server.registerTool(
   "context_write",
   {
     description: 'Write project context. file: "card" or a note name. With section only that card section is replaced; frontmatter is never changed.',
@@ -73,7 +89,7 @@ server.registerTool(
   wrap((a) => json(contextWrite(a.agent, a.file, a.text, a.section))),
 );
 
-server.registerTool(
+tools.repo_read = server.registerTool(
   "repo_read",
   {
     description: "Read a .md file inside the project's repo paths (read-only).",
@@ -82,7 +98,7 @@ server.registerTool(
   wrap((a) => text(repoRead(a.agent, a.path))),
 );
 
-server.registerTool(
+tools.send = server.registerTool(
   "send",
   {
     description: "New thread + first message to agent `to`. Returns thread_id.",
@@ -97,7 +113,7 @@ server.registerTool(
   wrap((a) => json(mailbox.send(a.to, a.subject, a.body, a.kind, a.ticket))),
 );
 
-server.registerTool(
+tools.reply = server.registerTool(
   "reply",
   {
     description: "Reply in a thread. Without `to` it goes to the other side.",
@@ -106,7 +122,7 @@ server.registerTool(
   wrap((a) => json(mailbox.reply(a.thread_id, a.body, a.kind, a.to))),
 );
 
-server.registerTool(
+tools.inbox = server.registerTool(
   "inbox",
   {
     description: "My messages, newest first, 200-char preview.",
@@ -115,7 +131,7 @@ server.registerTool(
   wrap((a) => json(mailbox.inbox(a.unread_only))),
 );
 
-server.registerTool(
+tools.read_thread = server.registerTool(
   "read_thread",
   {
     description:
@@ -128,7 +144,7 @@ server.registerTool(
   }),
 );
 
-server.registerTool(
+tools.close_thread = server.registerTool(
   "close_thread",
   {
     description: "Close thread as done, send summary to the other side, append to today's log; focus/next overwrite those card sections.",
@@ -142,7 +158,7 @@ server.registerTool(
   wrap((a) => json(mailbox.closeThread(a.thread_id, a.summary, a.focus, a.next))),
 );
 
-server.registerTool(
+tools.approve = server.registerTool(
   "approve",
   {
     description:
@@ -156,7 +172,7 @@ server.registerTool(
   wrap((a) => json(mailbox.approve(a.thread_id, a.decision, a.note))),
 );
 
-server.registerTool(
+tools.threads = server.registerTool(
   "threads",
   {
     description: "Threads of me (or of `agent`) by status.",

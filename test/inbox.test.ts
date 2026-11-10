@@ -302,7 +302,7 @@ describe("setup", () => {
     }
     expect(readdirSync(dir).filter((f) => f.startsWith("settings.json.bak-")).length).toBeGreaterThan(0);
     const desktop = JSON.parse(readFileSync(join(dir, "desktop.json"), "utf8"));
-    expect(desktop.mcpServers["claude-inbox"].env).toEqual({ CLAUDE_INBOX_AGENT: "chat" });
+    expect(desktop.mcpServers["claude-inbox-chat"].env).toEqual({ CLAUDE_INBOX_AGENT: "chat" });
   });
   it("zachová existujúcu identitu chatu z desktop configu", () => {
     
@@ -313,7 +313,8 @@ describe("setup", () => {
       encoding: "utf8",
     });
     const c = JSON.parse(readFileSync(desktop, "utf8"));
-    expect(c.mcpServers["claude-inbox"].env.CLAUDE_INBOX_AGENT).toBe("orchestrator");
+    expect(c.mcpServers["claude-inbox-chat"].env.CLAUDE_INBOX_AGENT).toBe("orchestrator");
+    expect(c.mcpServers["claude-inbox"]).toBeUndefined(); // the old name is replaced
     expect(c.mcpServers.x).toEqual({ command: "y" });
   });
 });

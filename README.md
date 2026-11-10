@@ -30,8 +30,8 @@ ours). Quit it (Cmd+Q on macOS) when asked, then start it again. Setup makes a b
 keeps your existing settings:
 
 1. builds the project,
-2. adds the `claude-inbox` MCP server to the Claude desktop config (macOS, Linux, Windows) with
-   `CLAUDE_INBOX_AGENT=<chat-agent>` (default `chat`),
+2. adds the MCP server to the Claude desktop config (macOS, Linux, Windows) under the name `claude-inbox-chat` with
+   `CLAUDE_INBOX_AGENT=<chat-agent>` (default `chat`); an entry named `claude-inbox` from older versions is replaced,
 3. registers the server in Claude Code (scope user, no fixed identity) and installs the `inbox-bar` mod,
 4. sets `statusLine` and the `SessionStart` / `UserPromptSubmit` / `SessionEnd` hooks in `~/.claude/settings.json`
    (an existing `statusLine` is replaced and printed),
@@ -55,7 +55,7 @@ An MCP server shared by chat and Code must know *who is talking*:
 
 - **Claude Code session** (detected by `CLAUDECODE=1`, which Claude Code sets for its child processes): card `paths`
   (longest prefix wins) → git repository name → folder name → `default`. `CLAUDE_INBOX_AGENT` is ignored.
-- **Chat**: `CLAUDE_INBOX_AGENT`, then the same chain.
+- **Chat**: `CLAUDE_INBOX_AGENT`, then the same chain. In chat the tools are named `mcp__claude-inbox-chat__…`, in Code `mcp__claude-inbox__…`.
 
 `claude-inbox whoami` prints the identity and where it came from. The server also prints
 `cwd / agent / source / environment` to stderr on start.
@@ -131,9 +131,13 @@ claude-inbox runs                 # headless runs
   `npm run setup -- --wait`, quit the app when asked. `npm run check` verifies the config and the handshake.
 - **`claude` not found during setup.** Setup also looks inside the desktop app's bundle; otherwise it prints the commands to
   run by hand.
-- **A Code session writes as the wrong agent.** Run `claude-inbox whoami` in the repo and check the stderr line in
-  `~/Library/Logs/Claude/mcp-server-claude-inbox.log` (macOS). The desktop app also hands its own MCP servers to Code
-  sessions; the chat instance tells the model not to use it from Code.
+- **A Code session writes as the wrong agent.** The desktop app also hands its own MCP servers to Code sessions (as a client
+  named `local-agent-mode-<server>`). That is why the chat entry is called `claude-inbox-chat`, not `claude-inbox`: Code
+  sessions then run their own `claude-inbox` server, which takes the identity from the repo, and the chat instance switches
+  its identity-bound tools off for Code clients (it keeps `map`, `context_write`, `repo_read`). Run `claude-inbox whoami` in
+  the repo; the server prints `cwd / agent / source / environment / client` to stderr
+  (`~/Library/Logs/Claude/mcp-server-claude-inbox-chat.log` on macOS). If you installed an older version, run
+  `npm run setup -- --wait` again to rename the entry.
 
 Status line labels are Slovak for now (*nové* = new, *na tebe* = waiting for you, *čaká* = waiting). Localization is welcome.
 

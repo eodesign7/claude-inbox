@@ -7,7 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { openDb, type Db } from "../src/db.js";
 import { PassThrough } from "node:stream";
-import { linkProject, resolveAgentOrFallback } from "../src/agent.js";
+import { isCodeClient, linkProject, resolveAgentOrFallback } from "../src/agent.js";
 import { Inbox, InboxError, formatThread, getThread, listAllThreads } from "../src/core.js";
 
 const root = resolve(import.meta.dirname, "..");
@@ -365,8 +365,8 @@ describe("setup skript", () => {
     const c = JSON.parse(readFileSync(cfg, "utf8"));
     expect(c.theme).toBe("x");
     expect(c.mcpServers.other).toEqual({ command: "foo" });
-    expect(c.mcpServers["claude-inbox"].env).toEqual({ CLAUDE_INBOX_AGENT: "chat" });
-    expect(c.mcpServers["claude-inbox"].args[0]).toMatch(/dist\/server\.js$/);
+    expect(c.mcpServers["claude-inbox-chat"].env).toEqual({ CLAUDE_INBOX_AGENT: "chat" });
+    expect(c.mcpServers["claude-inbox-chat"].args[0]).toMatch(/dist\/server\.js$/);
     expect(readdirSync(dir).some((f) => f.startsWith("claude_desktop_config.json.bak-"))).toBe(true);
     expect(out).toMatch(/claude mcp add claude-inbox --scope user -- /);
     expect(out).not.toMatch(/CLAUDE_INBOX_AGENT=api/);
@@ -382,5 +382,73 @@ describe("setup skript", () => {
       }),
     ).toThrow();
     expect(readFileSync(cfg, "utf8")).toBe("{ nie json");
+  });
+});
+
+describe("chat inštancia a klient Claude Code", () => {
+  const CODE_TOOLS_OFF = ["approve", "close_thread", "inbox", "read_thread", "reply", "send", "threads"];
+
+  async function connectAs(clientName: string, extraEnv: Record<string, string>, cwd: string) {
+    const env = { ...process.env, CLAUDE_INBOX_DB: dbPath, CLAUDE_INBOX_HOME: join(dir, "aico-home"), ...extraEnv } as Record<string, string | undefined>;
+    for (const k of ["CLAUDE_INBOX_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID"]) {
+      if (!(k in extraEnv)) delete env[k];
+    }
+    const client = new Client({ name: clientName, version: "1" });
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [join(root, "dist", "server.js")],
+      env: env as Record<string, string>,
+      cwd,
+      stderr: "pipe",
+    });
+    let err = "";
+    await client.connect(transport);
+    transport.stderr?.on("data", (d) => (err += d));
+    const names = async () => (await client.listTools()).tools.map((t) => t.name).sort();
+    return { client, names, err: () => err };
+  }
+
+  it("isCodeClient pozná klientov Claude Code a nie chat", () => {
+    expect(isCodeClient("local-agent-mode-claude-inbox")).toBe(true);
+    expect(isCodeClient("claude-code")).toBe(true);
+    expect(isCodeClient("claude-ai")).toBe(false);
+    expect(isCodeClient(undefined)).toBe(false);
+  });
+  it("chat (claude-ai) vidí všetkých 10 nástrojov", async () => {
+    const { client, names } = await connectAs("claude-ai", { CLAUDE_INBOX_AGENT: "alfred" }, "/");
+    try {
+      expect(await names()).toHaveLength(10);
+    } finally {
+      await client.close();
+    }
+  });
+  it("tá istá chatová inštancia pred klientom Claude Code vypne nástroje viazané na identitu", async () => {
+    const { client, names, err } = await connectAs("local-agent-mode-claude-inbox", { CLAUDE_INBOX_AGENT: "alfred" }, "/");
+    try {
+      const listed = await names();
+      for (const t of CODE_TOOLS_OFF) expect(listed).not.toContain(t);
+      expect(listed).toEqual(["context_write", "map", "repo_read"]);
+      const refused: any = await client.callTool({ name: "send", arguments: { to: "x", subject: "s", body: "b" } });
+      expect(refused.isError).toBe(true);
+      expect(db.prepare("SELECT COUNT(*) AS n FROM messages").get()).toEqual({ n: 0 });
+      await new Promise((r) => setTimeout(r, 100));
+      expect(err()).toMatch(/je Claude Code, identitné nástroje vypnuté/);
+    } finally {
+      await client.close();
+    }
+  });
+  it("server Claude Code (identita z karty repa) ostáva úplný aj pre klienta local-agent-mode", async () => {
+    const r = join(dir, "stella-like");
+    mkdirSync(join(r, ".git"), { recursive: true });
+    process.env.CLAUDE_INBOX_HOME = join(dir, "aico-home");
+    linkProject(r, "stella");
+    const { client, names } = await connectAs("local-agent-mode-claude-inbox", { CLAUDECODE: "1", CLAUDE_INBOX_AGENT: "alfred" }, r);
+    try {
+      expect(await names()).toHaveLength(10);
+      await client.callTool({ name: "send", arguments: { to: "alfred", subject: "Identity check", body: "from the repo session" } });
+      expect(db.prepare("SELECT from_agent, to_agent FROM messages ORDER BY id DESC LIMIT 1").get()).toEqual({ from_agent: "stella", to_agent: "alfred" });
+    } finally {
+      await client.close();
+    }
   });
 });

@@ -18,7 +18,7 @@ afterEach(() => {
   saved === undefined ? delete process.env.CLAUDE_INBOX_DESKTOP_CONFIG : (process.env.CLAUDE_INBOX_DESKTOP_CONFIG = saved);
 });
 const write = (entry: unknown) =>
-  writeFileSync(process.env.CLAUDE_INBOX_DESKTOP_CONFIG!, JSON.stringify({ mcpServers: entry ? { "claude-inbox": entry } : {} }));
+  writeFileSync(process.env.CLAUDE_INBOX_DESKTOP_CONFIG!, JSON.stringify({ mcpServers: entry ? { "claude-inbox-chat": entry } : {} }));
 
 describe("checkDesktop", () => {
   it("platný zápis: initialize prejde, nástroje sú 10", async () => {
@@ -29,7 +29,7 @@ describe("checkDesktop", () => {
   });
   it("chýbajúci záznam, zlý command, chýbajúci CLAUDE_INBOX_AGENT", async () => {
     write(null);
-    expect((await checkDesktop()).lines.join()).toMatch(/"claude-inbox" is missing/);
+    expect((await checkDesktop()).lines.join()).toMatch(/"claude-inbox-chat" is missing/);
     write({ command: "node", args: ["/x"], env: { CLAUDE_INBOX_AGENT: "chat" } });
     expect((await checkDesktop()).lines.join()).toMatch(/not an absolute path/);
     write({ command: process.execPath, args: [join(root, "dist", "server.js")] });
